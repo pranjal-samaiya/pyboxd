@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests scripts
+      - run: ruff format --check src tests scripts
+      - run: mypy src
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      # No nsjail on the runner: e2e tests run in unsandboxed dev mode and the
+      # isolation tests are skipped. The docker job below covers nsjail.
+      - run: pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t pyboxd:ci --build-arg COMMIT=${GITHUB_SHA::7} .
+      - name: Smoke test every language inside nsjail
+        env:
+          PYBOXD_AUTH_TOKEN: ci-smoke-token-0123456789
+        run: |
+          docker run -d --name pyboxd --privileged --cgroupns=host \
+            -e PYBOXD_AUTH_TOKEN -p 8080:8080 pyboxd:ci
+          python3 scripts/smoke_test.py --url http://localhost:8080 --wait 60
+      - name: Container logs
+        if: always()
+        run: docker logs pyboxd | tail -50

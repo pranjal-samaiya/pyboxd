@@ -1,0 +1,130 @@
+# PyBoxD language registry.
+#
+# Adding a language:
+#   1. Add one block under `languages:` below.
+#   2. Add scripts/lang_install/<id>.sh that installs the toolchain.
+# No Python or Dockerfile changes are needed.
+#
+# Templates expanded at runtime:
+#   {{source}}    path of the source file inside the jail
+#   {{artifact}}  path of the build output inside the jail
+#   {{class}}     artifact name without extension (Java main class)
+#   {{flags}}     user-supplied flags (must be a whole argument; checked against flag_allowlist)
+#
+# Limits: wall_time_s (seconds), memory_kb, max_processes. Per-request limits may
+# lower these values but never raise them.
+
+languages:
+  py3:
+    name: Python 3
+    source_filename: solution.py
+    run:
+      cmd: /usr/bin/python3
+      args: ["{{source}}"]
+      limits: { wall_time_s: 9, memory_kb: 262144, max_processes: 64 }
+
+  c:
+    name: C
+    source_filename: solution.c
+    artifact: solution
+    build:
+      cmd: /usr/bin/gcc
+      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}", "-lm"]
+      limits: { wall_time_s: 10, memory_kb: 1048576, max_processes: 100 }
+      flag_allowlist: ["-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"]
+    run:
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 524288, max_processes: 64 }
+
+  cpp:
+    name: C++
+    source_filename: solution.cpp
+    artifact: solution
+    build:
+      cmd: /usr/bin/g++
+      args: ["{{flags}}", "-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 10, memory_kb: 1048576, max_processes: 100 }
+      flag_allowlist: ["-O0", "-O1", "-O2", "-O3", "-Wall", "-Wextra", "-std=*"]
+    run:
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 524288, max_processes: 64 }
+
+  java:
+    name: Java
+    source_filename: Solution.java
+    source_filename_strategy: from_request
+    artifact: Solution.class
+    artifact_filename_strategy: from_request
+    rlimit_as_mb: 4096          # the JVM reserves far more address space than it uses
+    version_arg: -version
+    build:
+      cmd: /usr/bin/javac
+      args:
+        - "-J-Xmx512m"
+        - "-J-XX:TieredStopAtLevel=1"
+        - "-J-XX:+UseSerialGC"
+        - "-J-XX:-UsePerfData"
+        - "{{source}}"
+      limits: { wall_time_s: 30, memory_kb: 1048576, max_processes: 100 }
+    run:
+      cmd: /usr/bin/java
+      args:
+        - "-XX:TieredStopAtLevel=1"
+        - "-XX:+UseSerialGC"
+        - "-XX:-UsePerfData"
+        - "-Xmx256m"
+        - "-Xss64m"
+        - "-cp"
+        - "."
+        - "{{class}}"
+      limits: { wall_time_s: 15, memory_kb: 524288, max_processes: 100 }
+
+  javascript:
+    name: JavaScript (Node.js)
+    source_filename: solution.js
+    rlimit_as_mb: 4096          # V8 reserves a large virtual heap up front
+    run:
+      cmd: /usr/bin/node
+      args: ["{{source}}"]
+      limits: { wall_time_s: 9, memory_kb: 262144, max_processes: 64 }
+
+  bash:
+    name: Bash
+    source_filename: solution.sh
+    run:
+      cmd: /bin/bash
+      args: ["{{source}}"]
+      limits: { wall_time_s: 9, memory_kb: 102400, max_processes: 64 }
+
+  verilog:
+    name: Verilog (Icarus)
+    source_filename: solution.v
+    artifact: solution.vvp
+    version_arg: -V
+    strip_stdout_lines_containing: ["$finish called at"]
+    build:
+      cmd: /usr/bin/iverilog
+      args: ["-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 5, memory_kb: 524288, max_processes: 100 }
+    run:
+      cmd: /usr/bin/vvp
+      args: ["{{artifact}}"]
+      limits: { wall_time_s: 5, memory_kb: 262144, max_processes: 64 }
+
+  rust:
+    name: Rust
+    source_filename: solution.rs
+    artifact: solution
+    build:
+      cmd: /usr/bin/rustc
+      args: ["-O", "-o", "{{artifact}}", "{{source}}"]
+      limits: { wall_time_s: 20, memory_kb: 2097152, max_processes: 100 }
+    run:
+      cmd: ./{{artifact}}
+      limits: { wall_time_s: 3, memory_kb: 524288, max_processes: 64 }
+
+max_body_bytes: 4194304     # 4 MiB, whole HTTP body
+max_source_bytes: 262144    # 256 KiB, the "source" field
+max_tests: 50
+max_concurrent: 0           # 0 = number of CPUs (override with PYBOXD_MAX_CONCURRENT)
+queue_timeout_s: 30

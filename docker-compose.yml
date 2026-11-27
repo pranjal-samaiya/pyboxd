@@ -1,0 +1,23 @@
+services:
+  pyboxd:
+    image: pyboxd:latest
+    build: .
+    container_name: pyboxd
+    ports:
+      - "8080:8080"
+    environment:
+      # Required: a secret of at least 16 characters. Put it in .env (see .env.example).
+      PYBOXD_AUTH_TOKEN: ${PYBOXD_AUTH_TOKEN:?set PYBOXD_AUTH_TOKEN in .env}
+      PYBOXD_MAX_CONCURRENT: ${PYBOXD_MAX_CONCURRENT:-}
+      PYBOXD_CORS_ORIGINS: ${PYBOXD_CORS_ORIGINS:-*}
+    volumes:
+      - ./languages.yaml:/etc/pyboxd/languages.yaml:ro
+    # nsjail needs to create namespaces and cgroups.
+    privileged: true
+    cgroup: host
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
